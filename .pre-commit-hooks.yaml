@@ -1,0 +1,9 @@
+- id: github-guard
+  name: github-guard
+  description: Scan GitHub Actions workflows for security issues
+  entry: python -m github_guard .
+  language: python
+  pass_filenames: false
+  types: [yaml]
+  files: \.github/workflows/
+  additional_dependencies: ['ruamel.yaml>=0.18']

@@ -1,0 +1,52 @@
+name: Release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruamel.yaml pytest
+      - run: PYTHONPATH=. python -m pytest tests/ -v
+
+  binaries:
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-amd64
+          - os: macos-latest
+            target: darwin-arm64
+          - os: windows-latest
+            target: windows-amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyinstaller ruamel.yaml
+      - name: Build binary
+        run: |
+          pyinstaller --onefile --name github-guard-${{ matrix.target }} \
+            --hidden-import github_guard.checks.triggers \
+            --hidden-import github_guard.checks.permissions \
+            --hidden-import github_guard.checks.pinning \
+            --hidden-import github_guard.checks.secrets \
+            --hidden-import github_guard.checks.runners \
+            --hidden-import github_guard.checks.flow \
+            github_guard/__main__.py
+        shell: bash
+      - name: Upload binary to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/github-guard-${{ matrix.target }}*
