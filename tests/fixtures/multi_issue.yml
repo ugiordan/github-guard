@@ -1,0 +1,26 @@
+name: Multi Issue Workflow
+on:
+  pull_request:
+  pull_request_target:
+
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Deploy
+        run: |
+          echo "deploying"
+        env:
+          API_KEY: AKIAIOSFODNN7EXAMPLE0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: dist/
+
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: some-org/some-action@main

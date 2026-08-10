@@ -1,0 +1,16 @@
+name: PR Target Unsafe
+on: pull_request_target
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Run tests
+        run: make test

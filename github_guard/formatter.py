@@ -1,0 +1,141 @@
+"""Output formatting for GitHub Actions scanner findings."""
+
+from __future__ import annotations
+
+import json
+import os
+from collections import Counter
+from datetime import datetime, timezone
+from typing import Any
+
+from github_guard import __version__
+
+
+def _category_from_rule(rule_id: str) -> str:
+    prefix = rule_id.split("-")[1] if "-" in rule_id else ""
+    return {
+        "TRIG": "triggers",
+        "PERM": "permissions",
+        "PIN": "pinning",
+        "SEC": "secrets",
+        "RUN": "runners",
+        "FLOW": "flow",
+    }.get(prefix, "unknown")
+
+
+def format_json(findings: list[dict[str, Any]], target: str) -> str:
+    by_severity: dict[str, int] = Counter()
+    by_category: dict[str, int] = Counter()
+
+    for f in findings:
+        by_severity[f["severity"]] += 1
+        by_category[_category_from_rule(f["rule_id"])] += 1
+
+    report = {
+        "version": "1.0.0",
+        "scanner": "github-guard",
+        "scan_date": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "target": target,
+        "findings": findings,
+        "summary": {
+            "total": len(findings),
+            "by_severity": dict(by_severity),
+            "by_category": dict(by_category),
+        },
+    }
+    return json.dumps(report, indent=2)
+
+
+_SARIF_LEVEL = {
+    "CRITICAL": "error",
+    "HIGH": "error",
+    "MEDIUM": "warning",
+    "LOW": "note",
+    "INFO": "note",
+}
+
+
+def format_sarif(findings: list[dict[str, Any]], target: str) -> str:
+    rules_seen: dict[str, dict] = {}
+    results = []
+
+    for f in findings:
+        rule_id = f["rule_id"]
+        if rule_id not in rules_seen:
+            rules_seen[rule_id] = {
+                "id": rule_id,
+                "shortDescription": {"text": f["title"]},
+                "helpUri": f.get("docs_url", ""),
+                "properties": {"category": _category_from_rule(rule_id)},
+            }
+            if f.get("cwe"):
+                rules_seen[rule_id]["properties"]["cwe"] = f["cwe"]
+
+        file_path = f["file"]
+        artifact_uri = (
+            os.path.relpath(file_path, target)
+            if os.path.isabs(file_path)
+            else file_path
+        )
+
+        result: dict[str, Any] = {
+            "ruleId": rule_id,
+            "level": _SARIF_LEVEL.get(f["severity"], "warning"),
+            "message": {"text": f["message"]},
+            "locations": [{
+                "physicalLocation": {
+                    "artifactLocation": {"uri": artifact_uri},
+                    "region": {
+                        "startLine": max(f.get("line_start", 1), 1),
+                        "endLine": max(f.get("line_end", f.get("line_start", 1)), 1),
+                    },
+                },
+            }],
+        }
+        rule_ids_list = list(rules_seen.keys())
+        result["ruleIndex"] = rule_ids_list.index(rule_id)
+        if f.get("remediation"):
+            result["fixes"] = [{"description": {"text": f["remediation"]}}]
+        results.append(result)
+
+    sarif = {
+        "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [{
+            "tool": {
+                "driver": {
+                    "name": "github-guard",
+                    "version": __version__,
+                    "informationUri": "https://github.com/ugiordan/github-guard",
+                    "rules": list(rules_seen.values()),
+                },
+            },
+            "results": results,
+        }],
+    }
+    return json.dumps(sarif, indent=2)
+
+
+def format_text(findings: list[dict[str, Any]], target: str) -> str:
+    if not findings:
+        return f"No findings in {target}\n"
+
+    lines = [f"GitHub Actions Security Scan: {target}", f"Found {len(findings)} issue(s)", ""]
+    for f in findings:
+        lines.append(f"[{f['severity']}] {f['rule_id']}: {f['title']}")
+        lines.append(f"  File: {f['file']}:{f.get('line_start', '?')}")
+        lines.append(f"  {f['message']}")
+        if f.get("remediation"):
+            lines.append(f"  Fix: {f['remediation']}")
+        lines.append("")
+
+    if findings:
+        sev_counts = Counter(f["severity"] for f in findings)
+        summary_parts = []
+        for sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]:
+            if sev_counts.get(sev, 0) > 0:
+                summary_parts.append(f"{sev_counts[sev]} {sev}")
+        lines.append(f"Summary: {', '.join(summary_parts)}")
+        lines.append("")
+
+    return "\n".join(lines)

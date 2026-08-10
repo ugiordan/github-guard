@@ -1,0 +1,16 @@
+[project]
+name = "github-guard"
+version = "1.0.0"
+description = "Security scanner for GitHub Actions workflows"
+requires-python = ">=3.10"
+dependencies = ["ruamel.yaml>=0.18"]
+
+[project.scripts]
+github-guard = "github_guard.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["github_guard*"]
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
