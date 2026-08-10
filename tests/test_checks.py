@@ -438,9 +438,9 @@ def test_sec_002_no_false_positive_normal_action():
 # ---------------------------------------------------------------------------
 
 def test_sec_003_positive():
-    """Artifact upload in PR context = HIGH finding."""
+    """Artifact upload in pull_request_target context = HIGH finding."""
     wf = _workflow(
-        triggers={"pull_request": {}},
+        triggers={"pull_request_target": {}},
         permissions={},
         jobs={"build": _job(steps=[
             _step(uses="actions/upload-artifact@v4"),
@@ -535,9 +535,9 @@ def test_run_001_negative_push_only():
 # ---------------------------------------------------------------------------
 
 def test_run_002_positive():
-    """No timeout + PR trigger = LOW finding."""
+    """No timeout + pull_request_target trigger = LOW finding."""
     wf = _workflow(
-        triggers={"pull_request": {}},
+        triggers={"pull_request_target": {}},
         permissions={},
         jobs={"build": _job(steps=[_step(run="echo hi")])},
     )

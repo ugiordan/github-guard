@@ -71,21 +71,29 @@ def check_hardcoded_credentials(workflow: GHAWorkflow, config: ScannerConfig) ->
                 if finding:
                     findings.append(finding)
 
-            # Check run: blocks
+            # Check run: blocks for known secret prefixes only (not entropy)
             if step.run:
-                # FP guard: skip lines that are just referencing secrets properly
                 for line_text in step.run.splitlines():
                     stripped = line_text.strip()
                     if not stripped or stripped.startswith("#"):
                         continue
                     if _SECRETS_REF.search(stripped):
                         continue
-                    finding = _check_value_for_secrets(
-                        stripped, f"job '{job_name}', run block", "",
-                        workflow, step.line, config,
-                    )
-                    if finding:
-                        findings.append(finding)
+                    for pattern in config.secret_patterns:
+                        if pattern in stripped:
+                            if any(fp.search(stripped) for fp in _FALSE_POSITIVE_PATTERNS):
+                                continue
+                            findings.append(_finding(
+                                "GHA-SEC-001", "HIGH",
+                                "Hardcoded credential in workflow",
+                                workflow, step.line,
+                                f"Potential hardcoded credential in job '{job_name}', "
+                                f"run block. Value matches known secret pattern '{pattern}'.",
+                                cwe="CWE-798",
+                                remediation="Move the credential to GitHub Secrets and reference it as ${{ secrets.SECRET_NAME }}.",
+                                extra={"context": f"job '{job_name}', run block", "pattern": pattern},
+                            ))
+                            break
 
     return findings
 
@@ -122,27 +130,6 @@ def _check_value_for_secrets(
                     "${{ secrets.SECRET_NAME }}."
                 ),
                 extra={"context": context, "pattern": pattern},
-            )
-
-    # Check high-entropy strings
-    for match in _HIGH_ENTROPY_RE.finditer(value):
-        candidate = match.group()
-        if any(fp.search(candidate) for fp in _FALSE_POSITIVE_PATTERNS):
-            continue
-        if _is_high_entropy(candidate):
-            key_info = f" (key: {key})" if key else ""
-            return _finding(
-                "GHA-SEC-001", "HIGH",
-                "Hardcoded credential in workflow",
-                workflow, line,
-                f"High-entropy string found in {context}{key_info}. "
-                f"This may be a hardcoded credential.",
-                cwe="CWE-798",
-                remediation=(
-                    "If this is a credential, move it to GitHub Secrets. "
-                    "If it's a known safe value, add it to the baseline."
-                ),
-                extra={"context": context},
             )
 
     return None
@@ -228,13 +215,18 @@ def check_artifact_upload_in_pr(workflow: GHAWorkflow, config: ScannerConfig) ->
             if step.if_condition and "github.event.pull_request.head.repo.fork" in step.if_condition:
                 continue
 
+            # FP guard: skip if only pull_request trigger (not _target)
+            # pull_request runs in fork context with read-only token, low risk
+            if "pull_request_target" not in workflow.triggers:
+                continue
+
             findings.append(_finding(
                 "GHA-SEC-003", "HIGH",
-                "Artifact upload in PR context",
+                "Artifact upload in PR target context",
                 workflow, step.line,
-                f"Job '{job_name}' uploads artifacts in a PR-triggered workflow. "
-                f"Artifacts are accessible to anyone with read access to the repo "
-                f"and may contain sensitive build outputs or secrets from the runner.",
+                f"Job '{job_name}' uploads artifacts in a pull_request_target workflow. "
+                f"Artifacts uploaded with base repo privileges may contain sensitive "
+                f"build outputs or secrets from the runner.",
                 cwe="CWE-200",
                 remediation=(
                     "Restrict artifact uploads with an if: condition checking "

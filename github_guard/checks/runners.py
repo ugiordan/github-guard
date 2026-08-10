@@ -84,9 +84,11 @@ def check_job_without_timeout(workflow: GHAWorkflow, config: ScannerConfig) -> l
     """
     findings = []
 
-    # FP guard: skip trusted-only triggers
+    # FP guard: skip trusted-only or PR-only triggers
+    # pull_request has a default 6h timeout and runs in fork context
     trigger_keys = set(workflow.triggers.keys())
-    if trigger_keys and trigger_keys.issubset(_TRUSTED_TRIGGERS):
+    safe_triggers = _TRUSTED_TRIGGERS | {"pull_request"}
+    if trigger_keys and trigger_keys.issubset(safe_triggers):
         return findings
 
     for job_name, job in workflow.jobs.items():
