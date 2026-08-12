@@ -21,7 +21,6 @@ _EXTERNAL_TRIGGERS = {
     "pull_request", "pull_request_target", "pull_request_review",
     "pull_request_review_comment", "issue_comment", "issues",
     "discussion", "discussion_comment", "fork", "watch",
-    "workflow_dispatch",
 }
 
 _ATTACKER_CONTROLLED = [
@@ -29,11 +28,15 @@ _ATTACKER_CONTROLLED = [
     "github.event.issue.body",
     "github.event.pull_request.title",
     "github.event.pull_request.body",
+    "github.event.pull_request.head.ref",
+    "github.event.pull_request.head.label",
     "github.event.comment.body",
     "github.event.review.body",
     "github.event.discussion.title",
     "github.event.discussion.body",
     "github.event.head_commit.message",
+    "github.event.head_commit.author.name",
+    "github.event.head_commit.author.email",
     "github.event.commits[0].message",
     "github.head_ref",
 ]
@@ -65,12 +68,12 @@ def check_prt_fork_checkout(workflow: GHAWorkflow, config: ScannerConfig) -> lis
                 continue
 
             # Resolve env indirection: if ref uses ${{ env.VAR }},
-            # check step.env values for fork ref patterns
+            # check step.env and job.env values for fork ref patterns
             effective_refs = [ref_value]
             env_ref_match = re.search(r"\$\{\{\s*env\.(\w+)\s*\}\}", ref_value)
             if env_ref_match:
                 env_var = env_ref_match.group(1)
-                env_val = str(step.env.get(env_var, ""))
+                env_val = str(step.env.get(env_var, "") or job.env.get(env_var, ""))
                 if env_val:
                     effective_refs.append(env_val)
 

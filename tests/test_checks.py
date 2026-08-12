@@ -52,6 +52,7 @@ def _job(
     container=None,
     with_: dict | None = None,
     services: dict | None = None,
+    env: dict | None = None,
     if_condition: str = "",
     line: int = 10,
 ) -> GHAJob:
@@ -67,6 +68,7 @@ def _job(
         container=container,
         with_=with_ or {},
         services=services or {},
+        env=env or {},
         if_condition=if_condition,
         line=line,
     )
@@ -897,3 +899,100 @@ def test_run_001_negative_expression_runs_on():
     findings = run_checks([wf], ScannerConfig())
     run_001 = [f for f in findings if f["rule_id"] == "GHA-RUN-001"]
     assert len(run_001) == 0
+
+
+# ---------------------------------------------------------------------------
+# R2 coverage: TRIG-001 env indirection via job.env
+# ---------------------------------------------------------------------------
+
+def test_trig_001_job_env_indirection():
+    """PRT + checkout ref via job-level env = CRITICAL."""
+    wf = _workflow(
+        triggers={"pull_request_target": {}},
+        jobs={"build": _job(
+            env={"PR_REF": "${{ github.event.pull_request.head.sha }}"},
+            steps=[
+                _step(
+                    uses="actions/checkout@v4",
+                    with_={"ref": "${{ env.PR_REF }}"},
+                ),
+            ],
+        )},
+    )
+    findings = run_checks([wf], ScannerConfig())
+    trig_001 = [f for f in findings if f["rule_id"] == "GHA-TRIG-001"]
+    assert len(trig_001) >= 1
+
+
+# ---------------------------------------------------------------------------
+# R2 coverage: PIN-002 mutable tags beyond latest
+# ---------------------------------------------------------------------------
+
+def test_pin_002_mutable_tag_lts():
+    """Container with :lts tag = MEDIUM finding."""
+    wf = _workflow(
+        triggers={"pull_request_target": {}},
+        jobs={"build": _job(
+            container="node:lts",
+            steps=[_step(run="echo hi")],
+        )},
+    )
+    findings = run_checks([wf], ScannerConfig())
+    pin_002 = [f for f in findings if f["rule_id"] == "GHA-PIN-002"]
+    assert len(pin_002) >= 1
+
+
+# ---------------------------------------------------------------------------
+# R2 coverage: FLOW-001 case-insensitive + filename
+# ---------------------------------------------------------------------------
+
+def test_flow_001_case_insensitive():
+    """workflow_run referencing name with different case = still matches."""
+    wf1 = _workflow(
+        name="CI Build",
+        triggers={"pull_request": {}},
+        file_path=".github/workflows/ci.yml",
+    )
+    wf2 = _workflow(
+        name="Deploy",
+        triggers={"workflow_run": {"workflows": ["ci build"]}},
+        file_path=".github/workflows/deploy.yml",
+    )
+    findings = run_checks([wf1, wf2], ScannerConfig())
+    flow_001 = [f for f in findings if f["rule_id"] == "GHA-FLOW-001"]
+    assert len(flow_001) >= 1
+
+
+def test_flow_001_filename_reference():
+    """workflow_run referencing by filename = matches."""
+    wf1 = _workflow(
+        name="CI Build",
+        triggers={"pull_request": {}},
+        file_path=".github/workflows/ci.yml",
+    )
+    wf2 = _workflow(
+        name="Deploy",
+        triggers={"workflow_run": {"workflows": ["ci.yml"]}},
+        file_path=".github/workflows/deploy.yml",
+    )
+    findings = run_checks([wf1, wf2], ScannerConfig())
+    flow_001 = [f for f in findings if f["rule_id"] == "GHA-FLOW-001"]
+    assert len(flow_001) >= 1
+
+
+# ---------------------------------------------------------------------------
+# R2 coverage: PERM-001 job-level write-all
+# ---------------------------------------------------------------------------
+
+def test_perm_001_job_write_all():
+    """Job with permissions: write-all = HIGH finding."""
+    wf = _workflow(
+        triggers={"push": {}},
+        jobs={"deploy": _job(
+            permissions="write-all",
+            steps=[_step(run="echo deploy")],
+        )},
+    )
+    findings = run_checks([wf], ScannerConfig())
+    perm_001 = [f for f in findings if f["rule_id"] == "GHA-PERM-001"]
+    assert len(perm_001) >= 1

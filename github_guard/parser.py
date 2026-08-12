@@ -37,6 +37,7 @@ class GHAJob:
     container: Any = None  # None, str, or dict
     with_: dict[str, Any] = field(default_factory=dict)
     services: dict[str, Any] = field(default_factory=dict)
+    env: dict[str, Any] = field(default_factory=dict)
     if_condition: str = ""
     line: int = 0
 
@@ -119,6 +120,7 @@ def _parse_job(job_name: str, job_data: dict[str, Any]) -> GHAJob:
         container=job_data.get("container"),
         with_=dict(job_data.get("with", {})) if job_data.get("with") else {},
         services=dict(job_data.get("services", {})) if job_data.get("services") else {},
+        env=dict(job_data.get("env", {})) if job_data.get("env") else {},
         if_condition=str(job_data.get("if", "")),
         line=_get_line(job_data),
     )

@@ -131,7 +131,7 @@ def check_secret_as_workflow_input(workflow: GHAWorkflow, config: ScannerConfig)
         # This is a reusable workflow call
         for param_name, param_value in job.with_.items():
             val = str(param_value)
-            if "${{ secrets." in val or "${{secrets." in val:
+            if _SECRETS_REF.search(val):
                 findings.append(_finding(
                     "GHA-SEC-002", "MEDIUM",
                     "Secret passed as workflow input",
