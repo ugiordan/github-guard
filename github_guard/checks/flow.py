@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from github_guard.checks._common import (
     _finding,
     register_check,
@@ -25,11 +27,16 @@ def check_workflow_run_from_fork_triggerable(
     """
     findings = []
 
-    # Build a map of workflow name -> triggers
+    # Build maps: workflow name (lowercase) -> triggers, filename -> triggers
     name_to_triggers: dict[str, set[str]] = {}
+    filename_to_triggers: dict[str, set[str]] = {}
     for wf in workflows:
+        triggers = set(wf.triggers.keys())
         if wf.name:
-            name_to_triggers[wf.name] = set(wf.triggers.keys())
+            name_to_triggers[wf.name.lower()] = triggers
+        if wf.file_path:
+            basename = os.path.basename(wf.file_path)
+            filename_to_triggers[basename.lower()] = triggers
 
     for wf in workflows:
         wf_run_config = wf.triggers.get("workflow_run", {})
@@ -42,9 +49,12 @@ def check_workflow_run_from_fork_triggerable(
 
         for ref_name in referenced_names:
             ref_name = str(ref_name)
-            ref_triggers = name_to_triggers.get(ref_name, set())
+            # Look up by name (case-insensitive) or by filename
+            ref_triggers = name_to_triggers.get(ref_name.lower(), set())
+            if not ref_triggers:
+                ref_triggers = filename_to_triggers.get(ref_name.lower(), set())
 
-            # FP guard: skip if referenced workflow name doesn't match any file
+            # FP guard: skip if referenced workflow doesn't match any file
             if not ref_triggers:
                 continue
 

@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import re
-import string
 
 from github_guard.checks._common import _finding, register_check
 from github_guard.config import ScannerConfig
 from github_guard.parser import GHAWorkflow
 
 _SECRETS_REF = re.compile(r"\$\{\{\s*secrets\.[^}]+\}\}")
-_HIGH_ENTROPY_RE = re.compile(r"[A-Za-z0-9+/=_-]{20,}")
 
-# Common non-secret patterns to exclude from entropy checks
+# Common non-secret patterns to exclude from prefix checks
 _FALSE_POSITIVE_PATTERNS = [
     re.compile(r"https?://"),      # URLs
     re.compile(r"[a-z]+\.[a-z]+"),  # domain-like
@@ -21,23 +19,6 @@ _FALSE_POSITIVE_PATTERNS = [
     re.compile(r"^sha256:"),        # digest refs
     re.compile(r"^v?\d+(\.\d+)*"),  # semver
 ]
-
-
-def _is_high_entropy(value: str) -> bool:
-    """Check if a string has high entropy suggesting a hardcoded credential."""
-    if len(value) < 20:
-        return False
-    # Quick frequency check: high entropy = many distinct chars relative to length
-    charset = set(value)
-    ratio = len(charset) / len(value)
-    # Base64/hex strings typically have ratio > 0.3 for long strings
-    if ratio < 0.3:
-        return False
-    # Check it's mostly alphanumeric (not prose)
-    alnum_count = sum(1 for c in value if c in string.ascii_letters + string.digits + "+/=_-")
-    if alnum_count / len(value) < 0.8:
-        return False
-    return True
 
 
 @register_check
@@ -148,7 +129,7 @@ def check_secret_as_workflow_input(workflow: GHAWorkflow, config: ScannerConfig)
         if not job.uses:
             continue
         # This is a reusable workflow call
-        for param_name, param_value in job.with_ if hasattr(job, "with_") else []:
+        for param_name, param_value in job.with_.items():
             val = str(param_value)
             if "${{ secrets." in val or "${{secrets." in val:
                 findings.append(_finding(

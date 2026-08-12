@@ -21,7 +21,7 @@ from github_guard.parser import GHAWorkflow
 
 logger = logging.getLogger(__name__)
 
-_EXPECTED_MIN_CHECKS = 15
+_EXPECTED_MIN_CHECKS = 16
 
 _loaded = get_all_checks()
 _correlation_loaded = get_all_correlation_checks()

@@ -39,6 +39,10 @@ def check_self_hosted_without_protection(
         if not job.runs_on:
             continue
 
+        # Skip expression-based runs-on (can't determine runner statically)
+        if "${{" in job.runs_on:
+            continue
+
         # Check if runner is self-hosted (not matching GitHub-hosted patterns)
         runs_on_values = [v.strip() for v in job.runs_on.split(",")]
         is_self_hosted = False

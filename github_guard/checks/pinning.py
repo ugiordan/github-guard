@@ -10,6 +10,11 @@ from github_guard.parser import GHAWorkflow
 
 _SHA_PATTERN = re.compile(r"^[0-9a-fA-F]{40}$|^[0-9a-fA-F]{64}$")
 
+_KNOWN_MUTABLE_TAGS = frozenset({
+    "latest", "lts", "edge", "current", "stable",
+    "rolling", "nightly", "dev", "canary",
+})
+
 
 def _is_pinned_ref(ref: str) -> bool:
     """Check if a ref is a SHA (40 or 64 hex chars)."""
@@ -122,6 +127,20 @@ def _check_image_tag(
     # Split image:tag
     if ":" in image:
         tag = image.rsplit(":", 1)[1]
+        # If the "tag" contains a slash, the colon was a port separator
+        # (e.g. registry.example.com:5000/myimage), treat as untagged
+        if "/" in tag:
+            return _finding(
+                "GHA-PIN-002", "MEDIUM",
+                "Container image without tag",
+                workflow, line,
+                f"Container image '{image}' in job '{job_name}' has no tag "
+                f"(colon is a registry port separator), which defaults to :latest. "
+                f"Pin to a specific version.",
+                cwe="CWE-829",
+                remediation=f"Add a version tag to '{image}' or use @sha256: digest.",
+                extra={"job": job_name, "image": image},
+            )
         if tag == "latest":
             return _finding(
                 "GHA-PIN-002", "MEDIUM",
@@ -132,6 +151,18 @@ def _check_image_tag(
                 cwe="CWE-829",
                 remediation=f"Pin '{image}' to a specific version tag or @sha256: digest.",
                 extra={"job": job_name, "image": image},
+            )
+        if tag.lower() in _KNOWN_MUTABLE_TAGS:
+            return _finding(
+                "GHA-PIN-002", "MEDIUM",
+                "Container image uses known mutable tag",
+                workflow, line,
+                f"Container image '{image}' in job '{job_name}' uses mutable tag "
+                f"'{tag}'. Mutable tags can change without notice. "
+                f"Pin to a specific version or SHA256 digest.",
+                cwe="CWE-829",
+                remediation=f"Pin '{image}' to a specific version tag or @sha256: digest.",
+                extra={"job": job_name, "image": image, "tag": tag},
             )
         # Has a specific version tag, accept it
         return None

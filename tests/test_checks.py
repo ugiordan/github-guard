@@ -50,6 +50,7 @@ def _job(
     uses: str = "",
     secrets=None,
     container=None,
+    with_: dict | None = None,
     services: dict | None = None,
     if_condition: str = "",
     line: int = 10,
@@ -64,6 +65,7 @@ def _job(
         uses=uses,
         secrets=secrets,
         container=container,
+        with_=with_ or {},
         services=services or {},
         if_condition=if_condition,
         line=line,
@@ -99,7 +101,7 @@ def test_check_count():
     all_checks = get_all_checks()
     correlation = get_all_correlation_checks()
     total = len(all_checks) + len(correlation)
-    assert total >= 15, f"Expected at least 15 checks, got {total}"
+    assert total >= 16, f"Expected at least 16 checks, got {total}"
 
 
 # ---------------------------------------------------------------------------
@@ -768,3 +770,130 @@ def test_min_severity():
         assert f["severity"] in ("HIGH", "CRITICAL"), (
             f"Found {f['severity']} finding with min_severity=HIGH"
         )
+
+
+# ---------------------------------------------------------------------------
+# GHA-SEC-002: Secret in job-level with: (positive case)
+# ---------------------------------------------------------------------------
+
+def test_sec_002_positive_job_with():
+    """Reusable workflow call with secrets.* in with: = MEDIUM finding."""
+    wf = _workflow(
+        triggers={"push": {}},
+        permissions={},
+        jobs={"call": _job(
+            uses="other-org/workflows/.github/workflows/deploy.yml@main",
+            with_={"token": "${{ secrets.DEPLOY_TOKEN }}"},
+        )},
+    )
+    findings = run_checks([wf], ScannerConfig())
+    sec_002 = [f for f in findings if f["rule_id"] == "GHA-SEC-002"]
+    assert len(sec_002) >= 1
+    assert sec_002[0]["severity"] == "MEDIUM"
+
+
+# ---------------------------------------------------------------------------
+# GHA-TRIG-003: No-space expression variant
+# ---------------------------------------------------------------------------
+
+def test_trig_003_no_space_expression():
+    """String input with no spaces in expression = MEDIUM finding."""
+    wf = _workflow(
+        triggers={"workflow_dispatch": {
+            "inputs": {"tag": {"type": "string"}},
+        }},
+        jobs={"build": _job(steps=[
+            _step(run="echo ${{inputs.tag}}"),
+        ])},
+    )
+    findings = run_checks([wf], ScannerConfig())
+    trig_003 = [f for f in findings if f["rule_id"] == "GHA-TRIG-003"]
+    assert len(trig_003) >= 1
+
+
+# ---------------------------------------------------------------------------
+# GHA-PIN-002: Container image with port number
+# ---------------------------------------------------------------------------
+
+def test_pin_002_positive_registry_port():
+    """Container image with registry port = MEDIUM finding (untagged)."""
+    wf = _workflow(
+        triggers={"push": {}},
+        permissions={},
+        jobs={"build": _job(
+            container="registry.example.com:5000/myimage",
+            steps=[_step(run="echo")],
+        )},
+    )
+    findings = run_checks([wf], ScannerConfig())
+    pin_002 = [f for f in findings if f["rule_id"] == "GHA-PIN-002"]
+    assert len(pin_002) >= 1
+
+
+# ---------------------------------------------------------------------------
+# GHA-PERM-001: permissions: write-all
+# ---------------------------------------------------------------------------
+
+def test_perm_001_positive_write_all():
+    """permissions: write-all = HIGH finding."""
+    wf = _workflow(
+        triggers={"push": {}},
+        permissions="write-all",
+        jobs={"build": _job(steps=[_step(run="echo hi")])},
+    )
+    findings = run_checks([wf], ScannerConfig())
+    perm_001 = [f for f in findings if f["rule_id"] == "GHA-PERM-001"]
+    assert len(perm_001) >= 1
+    assert any("write-all" in f["message"] for f in perm_001)
+
+
+# ---------------------------------------------------------------------------
+# GHA-TRIG-004: Expression injection
+# ---------------------------------------------------------------------------
+
+def test_trig_004_positive():
+    """Attacker-controlled variable in run: block = HIGH finding."""
+    wf = _workflow(
+        triggers={"pull_request": {}},
+        permissions={},
+        jobs={"build": _job(steps=[
+            _step(run="echo ${{ github.event.pull_request.title }}"),
+        ])},
+    )
+    findings = run_checks([wf], ScannerConfig())
+    trig_004 = [f for f in findings if f["rule_id"] == "GHA-TRIG-004"]
+    assert len(trig_004) >= 1
+    assert trig_004[0]["severity"] == "HIGH"
+
+
+def test_trig_004_negative_push_only():
+    """Attacker-controlled variable in push-only workflow = no finding."""
+    wf = _workflow(
+        triggers={"push": {}},
+        permissions={},
+        jobs={"build": _job(steps=[
+            _step(run="echo ${{ github.event.pull_request.title }}"),
+        ])},
+    )
+    findings = run_checks([wf], ScannerConfig())
+    trig_004 = [f for f in findings if f["rule_id"] == "GHA-TRIG-004"]
+    assert len(trig_004) == 0
+
+
+# ---------------------------------------------------------------------------
+# GHA-RUN-001: runs-on with expression (should skip)
+# ---------------------------------------------------------------------------
+
+def test_run_001_negative_expression_runs_on():
+    """Expression-based runs-on should not be flagged (can't determine statically)."""
+    wf = _workflow(
+        triggers={"pull_request": {}},
+        permissions={},
+        jobs={"build": _job(
+            runs_on="${{ matrix.runner }}",
+            steps=[_step(run="echo hi")],
+        )},
+    )
+    findings = run_checks([wf], ScannerConfig())
+    run_001 = [f for f in findings if f["rule_id"] == "GHA-RUN-001"]
+    assert len(run_001) == 0

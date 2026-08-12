@@ -16,6 +16,28 @@ _FORK_REF_PATTERNS = [
 
 _CHECKOUT_ACTION = "actions/checkout"
 
+# Triggers that can be activated by external users
+_EXTERNAL_TRIGGERS = {
+    "pull_request", "pull_request_target", "pull_request_review",
+    "pull_request_review_comment", "issue_comment", "issues",
+    "discussion", "discussion_comment", "fork", "watch",
+    "workflow_dispatch",
+}
+
+_ATTACKER_CONTROLLED = [
+    "github.event.issue.title",
+    "github.event.issue.body",
+    "github.event.pull_request.title",
+    "github.event.pull_request.body",
+    "github.event.comment.body",
+    "github.event.review.body",
+    "github.event.discussion.title",
+    "github.event.discussion.body",
+    "github.event.head_commit.message",
+    "github.event.commits[0].message",
+    "github.head_ref",
+]
+
 
 @register_check
 def check_prt_fork_checkout(workflow: GHAWorkflow, config: ScannerConfig) -> list[dict]:
@@ -42,23 +64,38 @@ def check_prt_fork_checkout(workflow: GHAWorkflow, config: ScannerConfig) -> lis
                 # No ref = defaults to base branch, safe
                 continue
 
-            for pattern in _FORK_REF_PATTERNS:
-                if pattern in ref_value:
-                    findings.append(_finding(
-                        "GHA-TRIG-001", "CRITICAL",
-                        "pull_request_target with fork checkout",
-                        workflow, step.line,
-                        f"Job '{job_name}' checks out fork code (ref: {ref_value}) "
-                        f"in a pull_request_target workflow. This allows arbitrary code "
-                        f"execution with write permissions and secrets access.",
-                        cwe="CWE-94",
-                        remediation=(
-                            "Use pull_request trigger instead, or avoid checking out "
-                            "fork code. If you must use pull_request_target, run in a "
-                            "separate job with no secrets and minimal permissions."
-                        ),
-                        extra={"job": job_name, "ref": ref_value},
-                    ))
+            # Resolve env indirection: if ref uses ${{ env.VAR }},
+            # check step.env values for fork ref patterns
+            effective_refs = [ref_value]
+            env_ref_match = re.search(r"\$\{\{\s*env\.(\w+)\s*\}\}", ref_value)
+            if env_ref_match:
+                env_var = env_ref_match.group(1)
+                env_val = str(step.env.get(env_var, ""))
+                if env_val:
+                    effective_refs.append(env_val)
+
+            for check_ref in effective_refs:
+                matched = False
+                for pattern in _FORK_REF_PATTERNS:
+                    if pattern in check_ref:
+                        findings.append(_finding(
+                            "GHA-TRIG-001", "CRITICAL",
+                            "pull_request_target with fork checkout",
+                            workflow, step.line,
+                            f"Job '{job_name}' checks out fork code (ref: {check_ref}) "
+                            f"in a pull_request_target workflow. This allows arbitrary code "
+                            f"execution with write permissions and secrets access.",
+                            cwe="CWE-94",
+                            remediation=(
+                                "Use pull_request trigger instead, or avoid checking out "
+                                "fork code. If you must use pull_request_target, run in a "
+                                "separate job with no secrets and minimal permissions."
+                            ),
+                            extra={"job": job_name, "ref": check_ref},
+                        ))
+                        matched = True
+                        break  # one finding per ref
+                if matched:
                     break  # one finding per step
 
     return findings
@@ -156,12 +193,17 @@ def check_workflow_dispatch_injection(
             if not step.run:
                 continue
             for input_name in string_inputs:
+                # Use regex with \s* for whitespace flexibility
                 patterns = [
-                    f"${{{{ github.event.inputs.{input_name} }}}}",
-                    f"${{{{ inputs.{input_name} }}}}",
+                    re.compile(
+                        r"\$\{\{\s*github\.event\.inputs\." + re.escape(input_name) + r"\s*\}\}"
+                    ),
+                    re.compile(
+                        r"\$\{\{\s*inputs\." + re.escape(input_name) + r"\s*\}\}"
+                    ),
                 ]
                 for pat in patterns:
-                    if pat in step.run:
+                    if pat.search(step.run):
                         findings.append(_finding(
                             "GHA-TRIG-003", "MEDIUM",
                             "Unvalidated workflow_dispatch input in shell command",
@@ -179,6 +221,52 @@ def check_workflow_dispatch_injection(
                             extra={"job": job_name, "input": input_name},
                         ))
                         break  # one finding per input per step
+
+    return findings
+
+
+@register_check
+def check_expression_injection(workflow: GHAWorkflow, config: ScannerConfig) -> list[dict]:
+    """GHA-TRIG-004: Expression injection via attacker-controlled context.
+
+    Detects attacker-controlled GitHub context variables interpolated directly
+    into run: blocks, which enables arbitrary code execution.
+    """
+    findings = []
+
+    # Only flag in externally-triggerable workflows
+    trigger_keys = set(workflow.triggers.keys())
+    if not trigger_keys.intersection(_EXTERNAL_TRIGGERS):
+        return findings
+
+    # Build regex pattern for attacker-controlled variables
+    escaped = [re.escape(v) for v in _ATTACKER_CONTROLLED]
+    pattern = re.compile(
+        r"\$\{\{\s*(" + "|".join(escaped) + r")\s*\}\}"
+    )
+
+    for job_name, job in workflow.jobs.items():
+        for step in job.steps:
+            if not step.run:
+                continue
+            for match in pattern.finditer(step.run):
+                var = match.group(1)
+                findings.append(_finding(
+                    "GHA-TRIG-004", "HIGH",
+                    "Expression injection via attacker-controlled context",
+                    workflow, step.line,
+                    f"Attacker-controlled variable '${{{{ {var} }}}}' is interpolated "
+                    f"directly into a run: block in job '{job_name}'. An external user "
+                    f"can inject arbitrary commands via this context variable.",
+                    cwe="CWE-94",
+                    remediation=(
+                        "Pass the value through an environment variable instead: "
+                        f"env: SAFE_VAR: ${{{{ {var} }}}} then reference $SAFE_VAR "
+                        "in the script."
+                    ),
+                    extra={"job": job_name, "variable": var},
+                ))
+                break  # one finding per step
 
     return findings
 

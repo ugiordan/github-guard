@@ -35,6 +35,7 @@ class GHAJob:
     uses: str = ""  # reusable workflow call
     secrets: Any = None  # None, str ("inherit"), or dict
     container: Any = None  # None, str, or dict
+    with_: dict[str, Any] = field(default_factory=dict)
     services: dict[str, Any] = field(default_factory=dict)
     if_condition: str = ""
     line: int = 0
@@ -116,14 +117,27 @@ def _parse_job(job_name: str, job_data: dict[str, Any]) -> GHAJob:
         uses=str(job_data.get("uses", "")),
         secrets=job_data.get("secrets"),
         container=job_data.get("container"),
+        with_=dict(job_data.get("with", {})) if job_data.get("with") else {},
         services=dict(job_data.get("services", {})) if job_data.get("services") else {},
         if_condition=str(job_data.get("if", "")),
         line=_get_line(job_data),
     )
 
 
+_MAX_FILE_SIZE = 1 * 1024 * 1024  # 1 MB
+
+
 def parse_workflow(path: str) -> GHAWorkflow | None:
     """Parse a single GitHub Actions workflow YAML file."""
+    try:
+        file_size = os.stat(path).st_size
+        if file_size > _MAX_FILE_SIZE:
+            logger.warning("Skipping %s: file too large (%d bytes, max %d)", path, file_size, _MAX_FILE_SIZE)
+            return None
+    except OSError as e:
+        logger.warning("Cannot stat %s: %s", path, e)
+        return None
+
     yaml = YAML(typ="rt")
     yaml.preserve_quotes = True
 
@@ -195,6 +209,15 @@ def find_composite_actions(repo_path: str) -> list[str]:
 
 def parse_composite_action(path: str) -> GHAWorkflow | None:
     """Parse a composite action file as a GHAWorkflow for uniform check processing."""
+    try:
+        file_size = os.stat(path).st_size
+        if file_size > _MAX_FILE_SIZE:
+            logger.warning("Skipping %s: file too large (%d bytes, max %d)", path, file_size, _MAX_FILE_SIZE)
+            return None
+    except OSError as e:
+        logger.warning("Cannot stat %s: %s", path, e)
+        return None
+
     yaml = YAML(typ="rt")
     yaml.preserve_quotes = True
 

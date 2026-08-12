@@ -41,6 +41,38 @@ def check_missing_permissions(workflow: GHAWorkflow, config: ScannerConfig) -> l
             ),
         ))
 
+    # Check for write-all at top level
+    if workflow.permissions == "write-all":
+        findings.append(_finding(
+            "GHA-PERM-001", "HIGH",
+            "Overly permissive write-all permissions",
+            workflow, 1,
+            "Workflow uses 'permissions: write-all', granting full write access "
+            "to all scopes. This violates least-privilege and expands the blast "
+            "radius if the workflow is compromised.",
+            cwe="CWE-250",
+            remediation=(
+                "Replace 'permissions: write-all' with explicit per-scope permissions "
+                "(e.g., contents: write) to follow least-privilege."
+            ),
+        ))
+
+    # Check for write-all at job level
+    for job_name, job in workflow.jobs.items():
+        if job.permissions == "write-all":
+            findings.append(_finding(
+                "GHA-PERM-001", "HIGH",
+                "Overly permissive write-all permissions",
+                workflow, job.line,
+                f"Job '{job_name}' uses 'permissions: write-all', granting full write "
+                f"access to all scopes.",
+                cwe="CWE-250",
+                remediation=(
+                    "Replace 'permissions: write-all' with explicit per-scope permissions."
+                ),
+                extra={"job": job_name},
+            ))
+
     return findings
 
 

@@ -32,9 +32,8 @@ class ScannerConfig:
 
     secret_patterns: list[str] = field(default_factory=lambda: [
         "ghp_", "gho_", "ghu_", "ghs_", "ghr_",
-        "AKIA", "sk-", "sk_live_", "sk_test_",
+        "AKIA", "sk_live_", "sk_test_",
         "xoxb-", "xoxp-", "xapp-",
-        "SG.", "key-",
     ])
 
     def is_trusted_action_owner(self, uses: str) -> bool:
