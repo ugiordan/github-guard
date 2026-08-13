@@ -79,9 +79,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.explain:
-        from github_guard.checks._common import get_all_checks
+        from github_guard.checks._common import get_all_checks, get_all_correlation_checks
         rule = args.explain.upper()
-        for check_fn in get_all_checks():
+        for check_fn in get_all_checks() + get_all_correlation_checks():
             check_id = getattr(check_fn, "check_id", "")
             if check_id == rule:
                 doc = check_fn.__doc__ or ""

@@ -38,6 +38,18 @@ def check_hardcoded_credentials(workflow: GHAWorkflow, config: ScannerConfig) ->
             findings.append(finding)
 
     for job_name, job in workflow.jobs.items():
+        # Check job-level env
+        for env_key, env_val in job.env.items():
+            val = str(env_val)
+            if _SECRETS_REF.search(val):
+                continue
+            finding = _check_value_for_secrets(
+                val, f"job '{job_name}', job env", env_key,
+                workflow, job.line, config,
+            )
+            if finding:
+                findings.append(finding)
+
         for step in job.steps:
             # Check step env values
             for env_key, env_val in step.env.items():

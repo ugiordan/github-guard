@@ -73,7 +73,11 @@ def check_prt_fork_checkout(workflow: GHAWorkflow, config: ScannerConfig) -> lis
             env_ref_match = re.search(r"\$\{\{\s*env\.(\w+)\s*\}\}", ref_value)
             if env_ref_match:
                 env_var = env_ref_match.group(1)
-                env_val = str(step.env.get(env_var, "") or job.env.get(env_var, ""))
+                env_val = str(
+                    step.env.get(env_var, "")
+                    or job.env.get(env_var, "")
+                    or workflow.env.get(env_var, "")
+                )
                 if env_val:
                     effective_refs.append(env_val)
 
@@ -275,7 +279,13 @@ def check_expression_injection(workflow: GHAWorkflow, config: ScannerConfig) -> 
 
 
 def _job_uses_secrets(job, workflow: GHAWorkflow) -> bool:
-    """Check if a job or its steps reference secrets or GITHUB_TOKEN."""
+    """Check if a job, its env, or its steps reference secrets or GITHUB_TOKEN."""
+    secret_re = re.compile(r"\$\{\{\s*secrets\.", re.IGNORECASE)
+    token_re = re.compile(r"\$\{\{\s*github\.token", re.IGNORECASE)
+    for val in list(job.env.values()) + list(workflow.env.values()):
+        s = str(val)
+        if secret_re.search(s) or token_re.search(s):
+            return True
     for step in job.steps:
         if _step_uses_secrets(step):
             return True
