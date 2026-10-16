@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 140">
+  <path d="M60 5 L110 30 L110 80 C110 115 60 135 60 135 C60 135 10 115 10 80 L10 30 Z" fill="#1a1a2e" stroke="#e94560" stroke-width="3"/>
+  <circle cx="60" cy="65" r="25" fill="none" stroke="#e94560" stroke-width="3"/>
+  <circle cx="60" cy="65" r="5" fill="#e94560"/>
+  <line x1="60" y1="40" x2="60" y2="50" stroke="#e94560" stroke-width="3" stroke-linecap="round"/>
+  <line x1="60" y1="80" x2="60" y2="90" stroke="#e94560" stroke-width="3" stroke-linecap="round"/>
+  <line x1="35" y1="65" x2="45" y2="65" stroke="#e94560" stroke-width="3" stroke-linecap="round"/>
+  <line x1="75" y1="65" x2="85" y2="65" stroke="#e94560" stroke-width="3" stroke-linecap="round"/>
+  <line x1="42" y1="47" x2="49" y2="54" stroke="#e94560" stroke-width="3" stroke-linecap="round"/>
+  <line x1="71" y1="76" x2="78" y2="83" stroke="#e94560" stroke-width="3" stroke-linecap="round"/>
+  <line x1="78" y1="47" x2="71" y2="54" stroke="#e94560" stroke-width="3" stroke-linecap="round"/>
+  <line x1="49" y1="76" x2="42" y2="83" stroke="#e94560" stroke-width="3" stroke-linecap="round"/>
+</svg>
