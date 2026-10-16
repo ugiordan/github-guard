@@ -6,7 +6,7 @@
 
 Static security scanner for GitHub Actions workflows.
 
-github-guard parses GitHub Actions workflow YAML files and composite actions, running 15 security checks across 6 categories covering trigger abuse, permission escalation, supply chain pinning, secret hygiene, runner security, and workflow flow integrity. It catches what generic linters miss: `pull_request_target` + fork checkout chains, bypassable fork detection gates, workflow_dispatch injection, OIDC token misuse, and cross-workflow data flow risks.
+github-guard parses GitHub Actions workflow YAML files and composite actions, running 16 security checks across 6 categories covering trigger abuse, permission escalation, supply chain pinning, secret hygiene, runner security, and workflow flow integrity. It catches what generic linters miss: `pull_request_target` + fork checkout chains, bypassable fork detection gates, workflow_dispatch injection, OIDC token misuse, and cross-workflow data flow risks.
 
 **[Documentation](https://ugiordan.github.io/github-guard/)** | **[Detection Rules Reference](https://ugiordan.github.io/github-guard/reference/rules/)**
 
@@ -55,11 +55,11 @@ Summary: 1 CRITICAL, 1 HIGH, 2 MEDIUM
 
 ## What It Detects
 
-15 checks across 6 categories:
+16 checks across 6 categories:
 
 | Category | Checks | What It Catches |
 |----------|--------|-----------------|
-| **Triggers** | GHA-TRIG-001..003 | `pull_request_target` + fork checkout, bypassable fork detection, `workflow_dispatch` injection |
+| **Triggers** | GHA-TRIG-001..004 | `pull_request_target` + fork checkout, bypassable fork detection, `workflow_dispatch` injection, expression injection via attacker-controlled context |
 | **Permissions** | GHA-PERM-001..002 | Missing permissions block, `id-token:write` without OIDC consumer |
 | **Pinning** | GHA-PIN-001..002 | Unpinned action references (mutable tags), unpinned container images |
 | **Secrets** | GHA-SEC-001..003 | Hardcoded credentials, secrets passed as workflow inputs, artifact upload in PR context |

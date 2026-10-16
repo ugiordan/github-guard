@@ -1,6 +1,6 @@
 # Detection Rules
 
-github-guard runs 15 security checks across 6 categories. Each check has a unique ID, severity level, CWE mapping, and actionable remediation.
+github-guard runs 16 security checks across 6 categories. Each check has a unique ID, severity level, CWE mapping, and actionable remediation.
 
 ---
 

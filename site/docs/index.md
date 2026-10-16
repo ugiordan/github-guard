@@ -9,7 +9,7 @@ Static security scanner for GitHub Actions workflows
 
 ## How It Works
 
-github-guard parses GitHub Actions workflow YAML files and composite actions, running 15 security checks across 6 categories. It catches trigger abuse, permission escalation, supply chain risks, secret hygiene issues, runner misconfigurations, and workflow flow vulnerabilities.
+github-guard parses GitHub Actions workflow YAML files and composite actions, running 16 security checks across 6 categories. It catches trigger abuse, permission escalation, supply chain risks, secret hygiene issues, runner misconfigurations, and workflow flow vulnerabilities.
 
 ```mermaid
 graph LR
@@ -39,7 +39,7 @@ graph LR
 **Pipeline:**
 
 1. **Parser** loads workflow YAML with ruamel.yaml, handles trigger normalization, composite actions, and reusable workflow calls
-2. **15 Security Checks** across 6 categories detect trigger abuse, permission escalation, unpinned refs, secrets exposure, runner risks, and flow issues
+2. **16 Security Checks** across 6 categories detect trigger abuse, permission escalation, unpinned refs, secrets exposure, runner risks, and flow issues
 3. **FP Suppression** filters `workflow_call`-only workflows, trusted triggers, `${{ secrets.* }}` references, and configurable safe lists
 
 ---
@@ -110,11 +110,11 @@ github-guard /path/to/repo --format sarif --output results.sarif
 
 ## What Gets Detected
 
-15 checks across 6 categories:
+16 checks across 6 categories:
 
 | Category | Checks | Examples |
 |----------|--------|---------|
-| **Triggers** | GHA-TRIG-001..003 | `pull_request_target` + fork checkout, bypassable fork detection, `workflow_dispatch` injection |
+| **Triggers** | GHA-TRIG-001..004 | `pull_request_target` + fork checkout, bypassable fork detection, `workflow_dispatch` injection, expression injection via attacker-controlled context |
 | **Permissions** | GHA-PERM-001..002 | Missing permissions block, `id-token:write` without OIDC consumer |
 | **Pinning** | GHA-PIN-001..002 | Unpinned action references, unpinned container images |
 | **Secrets** | GHA-SEC-001..003 | Hardcoded credentials, secrets as workflow inputs, artifact upload in PR context |
